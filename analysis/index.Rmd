@@ -1,11 +1,136 @@
 ---
-title: "Home"
+title: "**QTL Analysis Report -** Pinkney"
+author: "Belinda Cornes"
+date: "`r Sys.Date()`"
 site: workflowr::wflow_site
 output:
   workflowr::wflow_html:
-    toc: false
+    toc: true
 editor_options:
   chunk_output_type: console
 ---
 
-Welcome to my research website.
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,warning=FALSE)
+
+library("kableExtra")
+library("knitr")
+library(data.table) 
+library(tidyr)
+library(mclust)
+library(optparse)
+library(dplyr)
+library(cluster)
+library(readxl)
+library(tibble)
+library(ggplot2)
+library(broman)
+library(qtl2)
+library(qtlcharts)
+library(ggrepel)
+library(dplyr)
+library(readxl) 
+
+options(stringsAsFactors = FALSE)
+
+```
+
+
+### **1. Experiment Design**
+
+```{r chapter1, eval=TRUE}
+
+gmap <- read_csv("/Users/corneb/Documents/MyJax/CS/Projects/Pinkney/scripts/gmap.csv")
+pmap <- read_csv("/Users/corneb/Documents/MyJax/CS/Projects/Pinkney/scripts/pmap.csv")
+phenos <- read_csv("/Users/corneb/Documents/MyJax/CS/Projects/Pinkney/scripts/pheno.csv")
+genos <- read_csv("/Users/corneb/Documents/MyJax/CS/Projects/Pinkney/scripts/geno.csv")
+covars <- read_csv("/Users/corneb/Documents/MyJax/CS/Projects/Pinkney/scripts/pheno_covar.csv")
+
+design = matrix(ncol=8, nrow=1, dimnames = list("",c("abbreviations for strains:","type of cross:","number of mice phenotyped:","total number of mice phenotypes:","phenotypes:","number of mice:","number of markers:","covariates:")))
+design[1,1] <- "H: het; B: hom B6; C: hom C3A"
+design[1,2] <- "F2"
+design[1,3] <- nrow(phenos)
+design[1,4] <- "6"
+design[1,5] <- "3 axial length data (R_AVG, L_AVG, Both_AVG); 3 degeneration data (deg_avg_r, deg_avg_l, deg_avg_b)"
+design[1,6] <- ncol(genos)
+design[1,7] <- nrow(genos)
+design[1,8] <- paste0("sex [F: ", nrow(covars[covars$Sex=="F",]), "; M: ", nrow(covars[covars$Sex=="M",]),"]")
+
+design <- t(design)
+#design <- as.data.frame(design)
+#design$category <- rownames(design)
+#rownames <- NULL
+
+design[] %>%
+  kable(escape = F,align = c("lr")) %>%
+  kable_styling("striped", full_width = T) %>%
+  column_spec(1, width = "5cms", bold=TRUE)  %>%
+  column_spec(2, width = "1cms") 
+
+cross <- read_cross2("/Users/corneb/Documents/MyJax/CS/Projects/Pinkney/scripts/gm.json")
+#cross
+
+```
+
+### **2. Statistical Methods**
+* **2.1. Genome-wide scan**
+	+ Pseudo-markers were generated at 1-cM spacing for each chromosome. One thousand permutations were performed to determine the thresholds for QTL detection (Doerge and Churchill, 1996). Four thresholds 5%, 10% and 20% were calculated from the permutation results. 
+* **2.2. Sotfware**
+	+ `R/qtl2` was used (Broman et al, 2019).
+
+### [**3. Distributions of Data and Quality Control Diagnostics**](3.0_distributions_qc.html)
+* **3.1. Phenotype distribution**
+* **3.2. Genotyping quality assessment** (Recombination fraction)
+
+### [**4. Results**](4.0_results.html)
+* **4.1. Sex effect**
+* **4.2. Genome-wide scan**
+* **4.3. LOD peaks**
+* **4.4. QTL effects**
+
+### **5. Conclusion and Discussion**
+In this report, we performed QTL mapping for 6 phenotypes for a F2 cross between C3A X B6. Sex did not have a significant effect on eye axial length for any phenotype (after the removal of outliers) .By using the 95% threshold, we identified QTLs that were significant at a genome-wide p value of < 0.05. We estimated effects for each QTL. The QTLs were found for phenotypes as follows:
+
+*R_AVG:*	
+
+* Chromosome 3, @45.5	
+
+*L_AVG:*	
+
+* Chromosome 3, @51.5	
+* Chromosome 19, @25.5	
+
+*Both_AVG:*	
+
+* Chromosome 3, @49.5	
+* Chromosome 19, @24.5	
+
+*deg_avg_r:*	
+
+* Chromosome 2, @52.3	
+* Chromosome 4, @57.6	
+
+*deg_avg_l:*	
+
+* Chromosome 2, @54.3	
+* Chromosome 4, @51.6	
+* Chromosome 12, @45.5	
+
+*deg_avg_b:*	
+
+* Chromosome 2, @53.3	
+* Chromosome 4, @56.6	
+* Chromosome 12, @45.5	
+
+
+### **6. References**
+Broman, K. W., Wu H., Sen S., Churchill, G. A. 2003. R/qtl: QTL mapping in experimental crosses. Bioinformatics 19:889-890.
+
+Doerge, R. W. and Churchill, G. A.. 1996. Permutation tests for multiple loci affecting a quantitative character. Genetics 142, 285-294.
+
+Lander, E. and Kruglyak, L.. 1995. Genetic dissection of complex traits: guidelines for interpreting and reporting linkage results. Nature Genetics.11: 241-247.
+
+Sen, S. and Churchill, G. A.. 2001. A statistical framework for quantitative trait mapping. Genetics 159, 371-387. 12
+
+Broman, K. W., Gatti, D. M. Churchill, G. A.2019. R/qtl2: Software for Mapping Quantitative Trait Loci with High-Dimensional Data and Multiparent Populations. Genetics 211, 2 495-502
+

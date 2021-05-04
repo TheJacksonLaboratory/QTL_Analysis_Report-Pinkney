@@ -1,0 +1,224 @@
+---
+title: "**3. Distributions of Data and Quality Control Diagnostics**"
+author: "Belinda Cornes"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,warning=FALSE)
+
+library("kableExtra")
+library("knitr")
+options(stringsAsFactors = FALSE)
+library(data.table) 
+library(tidyr)     
+library(mclust)     
+library(rhdf5)      
+library(optparse)
+library(dplyr)
+library(cluster)
+library(readxl)
+library(psych)
+library(tibble)
+library(ggplot2)
+library(reshape2)
+library(qtl2)
+library(qtl)
+library(dplyr)
+
+gmap <- read_csv("/Users/corneb/Documents/MyJax/CS/Projects/Pinkney/scripts/gmap.csv")
+pmap <- read_csv("/Users/corneb/Documents/MyJax/CS/Projects/Pinkney/scripts/pmap.csv")
+phenos <- read_csv("/Users/corneb/Documents/MyJax/CS/Projects/Pinkney/scripts/pheno.csv")
+genos <- read_csv("/Users/corneb/Documents/MyJax/CS/Projects/Pinkney/scripts/geno.csv")
+covars <- read_csv("/Users/corneb/Documents/MyJax/CS/Projects/Pinkney/scripts/pheno_covar.csv")
+
+cross <- qtl2::read_cross2("/Users/corneb/Documents/MyJax/CS/Projects/Pinkney/scripts/gm.json")
+select_phenos <- colnames(cross$pheno)
+df_phenos <- cross$pheno
+
+phenos$id <- rownames(phenos)
+covars$id <- rownames(covars)
+phenos.covars <- merge(phenos[c("id","R_AVG","L_AVG","Both_AVG","deg_avg_r", "deg_avg_l" ,"deg_avg_b")],covars[c("id","Sex")], by=c("id"), all=T)
+##reformat
+phenos.covars.lg <- phenos.covars %>% gather(variable, value, -c("id","Sex"))
+phenos.covars.1 <- subset(phenos.covars.lg, variable %in% c("R_AVG","L_AVG","Both_AVG"))
+phenos.covars.2 <- subset(phenos.covars.lg, variable %in% c("deg_avg_r", "deg_avg_l" ,"deg_avg_b"))
+
+````
+
+### **3.1 Phenotype distribution**
+In total we have 225 samples, among them 120 females, 105 males. We use 6 phenotypes for QTL analysis. They are:
+
++ average right eye axial length (`R_AVG`), 
++ average left eye axial length (`L_AVG`), 
++ average axial length for both eyes (`Both_AVG`), 
++ average right eye axial length for degeneration data (`deg_avg_r`), 
++ average left eye axial length for degeneration data (`deg_avg_l`), 
++ average axial length for both eyes for degeneration data (`deg_avg_b`).
+
+Phenotypic distributions are plotted below. 
+
+```{r Phenotype distribution, fig.height = 6, fig.width = 9.5, fig.align = "center"}
+
+#phenotypes:
+#print(colnames(df_phenos))
+
+#Axial Length:
+#dev.off()
+pairs.panels(df_phenos[,c("R_AVG","L_AVG","Both_AVG")], 
+             method = "pearson", # correlation method
+             hist.col = "#00AFBB",
+             density = TRUE,  # show density plots
+             lm = TRUE
+)
+#dev.off()
+
+box1 <-  ggplot(data=phenos.covars.1, aes(x=variable, y=as.numeric(value), color=Sex, fill=Sex)) +
+         geom_boxplot(position = position_dodge(width=0.9)) +
+         #ggtitle(paste0("Values of ",v," [random dataframe: ",r,"]")) +
+         #labs(y = v) +
+         theme(strip.text.x = element_text(size=13),
+               axis.text.x = element_text(size = 13, angle = 0),
+               axis.text.y = element_text(size = 13, angle = 0),  
+               axis.title.x=element_blank(),
+               axis.title.y=element_blank(),
+               plot.title = element_text(size = 13, face = "bold",hjust = 0.5),
+                  #legend.position = "none"
+             )
+box1
+
+
+
+#Degeneration:
+#dev.off()
+pairs.panels(df_phenos[,c("deg_avg_r", "deg_avg_l" ,"deg_avg_b")], 
+             method = "pearson", # correlation method
+             hist.col = "#00AFBB",
+             density = TRUE,  # show density plots
+             lm = TRUE
+)
+#dev.off()
+
+box2 <-  ggplot(data=phenos.covars.2, aes(x=variable, y=as.numeric(value), color=Sex, fill=Sex)) +
+         geom_boxplot(position = position_dodge(width=0.9)) +
+         #ggtitle(paste0("Values of ",v," [random dataframe: ",r,"]")) +
+         #labs(y = v) +
+         theme(strip.text.x = element_text(size=13),
+               axis.text.x = element_text(size = 13, angle = 0),
+               axis.text.y = element_text(size = 13, angle = 0),  
+               axis.title.x=element_blank(),
+               axis.title.y=element_blank(),
+               plot.title = element_text(size = 13, face = "bold",hjust = 0.5),
+                  #legend.position = "none"
+             )
+box2
+
+
+```
+QTL analysis requires variables follow normal distribution, from the above distributions, there are no "bad" candidates for QTL analysis.  
+
+
+However, we removed any samples that were 3 standard deviations from the mean for a particular phenotype.  These were:
+
+```{r outliers, fig.height = 6, fig.width = 9.5, fig.align = "center"}
+
+#outliers
+df_phenos.df <- as.data.frame(df_phenos)
+#des.3 <- Hmisc::describe(df_phenos[,c("R_AVG","L_AVG","Both_AVG")]) 
+des.1 <- pastecs::stat.desc(df_phenos.df[,c("R_AVG","L_AVG","Both_AVG","deg_avg_r", "deg_avg_l" ,"deg_avg_b")]) 
+des.2 <- psych::describe(df_phenos.df[,c("R_AVG","L_AVG","Both_AVG","deg_avg_r", "deg_avg_l" ,"deg_avg_b")]) 
+
+#scale(df_phenos[,c("R_AVG")])
+
+df_phenos.df$out.R_AVG <- ifelse(df_phenos.df[,c("R_AVG")] > (des.1[9,1] + 3*des.1[13,1])  | df_phenos.df[,c("R_AVG")] < (des.1[9,1] - 3*des.1[13,1]), 'Outlier','Keep')
+df_phenos.df$out.L_AVG <- ifelse(df_phenos.df[,c("L_AVG")] > (des.1[9,2] + 3*des.1[13,2])  | df_phenos.df[,c("L_AVG")] < (des.1[9,2] - 3*des.1[13,2]), 'Outlier','Keep')
+df_phenos.df$out.Both_AVG <- ifelse(df_phenos.df[,c("Both_AVG")] > (des.1[9,3] + 3*des.1[13,3])  | df_phenos.df[,c("Both_AVG")] < (des.1[9,3] - 3*des.1[13,3]), 'Outlier','Keep')
+df_phenos.df$out.deg_avg_r <- ifelse(df_phenos.df[,c("R_AVG")] > (des.1[9,4] + 3*des.1[13,4])  | df_phenos.df[,c("R_AVG")] < (des.1[9,4] - 3*des.1[13,4]), 'Outlier','Keep')
+df_phenos.df$out.deg_avg_l <- ifelse(df_phenos.df[,c("L_AVG")] > (des.1[9,5] + 3*des.1[13,5])  | df_phenos.df[,c("L_AVG")] < (des.1[9,5] - 3*des.1[13,5]), 'Outlier','Keep')
+df_phenos.df$out.deg_avg_b <- ifelse(df_phenos.df[,c("Both_AVG")] > (des.1[9,6] + 3*des.1[13,6])  | df_phenos.df[,c("Both_AVG")] < (des.1[9,6] - 3*des.1[13,6]), 'Outlier','Keep')
+
+bad <- NULL
+bad$Mouse.ID <- rownames(df_phenos.df)
+bad$R_AVG <- ifelse(df_phenos.df$out.R_AVG =="Outlier", 'XX', '')
+bad$L_AVG <- ifelse(df_phenos.df$out.L_AVG =="Outlier", 'XX', '')
+bad$Both_AVG <- ifelse(df_phenos.df$out.Both_AVG =="Outlier", 'XX', '')
+bad$deg_avg_r <- ifelse(df_phenos.df$out.deg_avg_r =="Outlier", 'XX', '')
+bad$deg_avg_l <- ifelse(df_phenos.df$out.deg_avg_l =="Outlier", 'XX', '')
+bad$deg_avg_b <- ifelse(df_phenos.df$out.deg_avg_b =="Outlier", 'XX', '')
+bad[is.na(bad)] <- ""
+bad[bad=='NA'] <- ""
+df <- do.call(cbind, bad)
+bad <- as.data.frame(df)
+
+badind <- subset(bad, 
+         bad$R_AVG == 'XX'|
+         bad$L_AVG == 'XX'|  
+         bad$Both_AVG == 'XX'|
+         bad$deg_avg_r == 'XX'|
+         bad$deg_avg_l == 'XX'|
+         bad$deg_avg_b == 'XX')
+
+
+#badind <- bad[bad$no_pheno == 'XX',]
+
+badind[] <- lapply(badind, as.character)
+#badind$Thaiss_ID <- ifelse(badind$Thaiss == 994 | badind$Thaiss == 995 | badind$Thaiss == 996 |badind$Thaiss == 997 | badind$Thaiss == 998 | badind$Thaiss == 999, "--", bad$Thaiss_ID)
+
+rownames(badind) <- NULL
+
+badind[] %>% 
+   dplyr::mutate(
+     R_AVG = ifelse(R_AVG == 'XX',
+                  cell_spec(R_AVG, color = 'gray',background = 'gray'),
+                  ''),
+     L_AVG = ifelse(L_AVG == 'XX',
+                  cell_spec(L_AVG, color = 'gray',background = 'gray'),
+                  ''),
+     Both_AVG = ifelse(Both_AVG == 'XX',
+                  cell_spec(Both_AVG, color = 'gray',background = 'gray'),
+                  ''),
+     deg_avg_r = ifelse(deg_avg_r == 'XX',
+                  cell_spec(deg_avg_r, color = 'gray',background = 'gray'),
+                  ''),
+     deg_avg_l = ifelse(deg_avg_l == 'XX',
+                  cell_spec(deg_avg_l, color = 'gray',background = 'gray'),
+                  ''),
+     deg_avg_b = ifelse(deg_avg_b == 'XX',
+                  cell_spec(deg_avg_b, color = 'gray',background = 'gray'),
+                  '')
+     ) %>%
+   kable(escape = F,align = c("ccccccccc"),linesep ="\\hline") %>%
+   kable_styling("striped", full_width = F) %>%
+   column_spec(1:6, width = "3cm") 
+
+
+
+##removing outliers
+df_phenos.df$Mouse.ID <- rownames(df_phenos.df)
+df_phenos.df$R_AVG[df_phenos.df$out.R_AVG == "Outlier"] <- '' 
+df_phenos.df$L_AVG[df_phenos.df$out.L_AVG == "Outlier"] <- '' 
+df_phenos.df$Both_AVG[df_phenos.df$out.Both_AVG == "Outlier"] <- '' 
+df_phenos.df$deg_avg_r[df_phenos.df$out.deg_avg_r == "Outlier"] <- '' 
+df_phenos.df$deg_avg_l[df_phenos.df$out.deg_avg_l == "Outlÿer"] <- '' 
+df_phenos.df$deg_avg_b[df_phenos.df$out.deg_avg_b == "Outlier"] <- '' 
+
+#df_phenos.df <- df_phenos.df[c(1:15)]
+#df_phenos.df$id <- rownames(df_phenos.df)
+write.csv(df_phenos.df[c(22,1:15)],"/Users/corneb/Documents/MyJax/CS/Projects/Pinkney/scripts/pheno_cleaned.csv", row.names=F, quote=F)
+
+
+```
+
+That is, those that have a grey square were removed for that particular phenotype in the QTL mapping. 
+
+### **3.2 Genotyping quality assessment**
+The recombination fraction (RF) plot is presented below. Markers on the same chromosome that are closer to each other are assumed to be linked (yellow color); Markers that are far away from each other on the same chromosome or markers on the different chromosomes are assumed to be independent. The patterns in Figure 2 suggests that the quality of genotyping is reasonably good.
+
+```{r Genotyping quality assessment, fig.height = 6, fig.width = 9.5, fig.align = "center"}
+
+cross <- read.cross("csv", "/Users/corneb/Documents/MyJax/CS/Projects/Pinkney/scripts", "geno_t_pheno_covar.csv")
+mapthis <- est.rf(cross)
+plotRF(mapthis, alternate.chrid=FALSE, what="rf")
+
+```
