@@ -1,7 +1,7 @@
-name: "QTL_Analysis_Report-Pinkney"
+name: QTL_Analysis_Report-Pinkney
 output_dir: ../docs
 navbar:
-  title: "QTL_Analysis_Report-Pinkney"
+  title: QTL_Analysis_Report-Pinkney
   left:
   - text: Home
     href: index.html
@@ -9,9 +9,13 @@ navbar:
     href: about.html
   - text: License
     href: license.html
+  right:
+  - icon: fa-github
+    text: Source code
+    href: https://github.com/TheJacksonLaboratory/QTL_Analysis_Report-Pinkney
 output:
   workflowr::wflow_html:
     toc: yes
-    toc_float: yes
+    toc_float: no
     theme: cosmo
     highlight: textmate
