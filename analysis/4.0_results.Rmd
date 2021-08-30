@@ -25,6 +25,7 @@ library(ggplot2)
 library(reshape2)
 library(qtl2)
 #library(qtl)
+library(abind)
 
 gmap <- read_csv("/Users/corneb/Documents/MyJax/CS/Projects/Pinkney/scripts/gmap.csv")
 pmap <- read_csv("/Users/corneb/Documents/MyJax/CS/Projects/Pinkney/scripts/pmap.csv")
@@ -100,9 +101,23 @@ The table shows the estimated significance thresholds from permutation test.
 ```{r permutation, fig.height = 6, fig.width = 9.5, fig.align = "center"}
 
 map <- insert_pseudomarkers(cross$gmap, step=1)
-pr <- calc_genoprob(cross, map, error_prob=0.002)
+pmap_interp = interp_map(map, cross$gmap, cross$pmap)
 
+gmapdf <- as.data.frame(do.call(abind, map))
+gmapdf$index <- 1:nrow(gmapdf)
+gmapdf$marker <- rownames(gmapdf)
+pmapdf <- as.data.frame(do.call(abind, pmap_interp))
+pmapdf$marker <- rownames(pmapdf)
+mapdf <- merge(gmapdf,pmapdf, by=c("marker"), all=T)
+mapdf$chr = sapply(strsplit(mapdf$marker,'_'),function(x) x[1])
+mapdf$chr = sub("^c","", mapdf$chr)
+mapdf$chr = sapply(strsplit(mapdf$chr,'.loc'),function(x) x[1])
+mapdf <- mapdf[order(mapdf$index),]
+names(mapdf) <- c('marker','gmapdf','index','pmapdf','chr')
+
+pr <- calc_genoprob(cross, map, error_prob=0.002)
 apr <- genoprob_to_alleleprob(pr)
+
 kinship <- calc_kinship(pr)
 Xcovar <- get_x_covar(cross)
 addcovar = model.matrix(~Sex, data = covars)[,-1]
@@ -171,6 +186,28 @@ peaks[] %>%
   kable_styling("striped", full_width = T) %>%
   column_spec(1, bold=TRUE)
 
+peaks_mbl <- list()
+#corresponding info in Mb
+for(i in 1:nrow(peaks)){
+  lodindex <- peaks$lodindex[i]
+  lodcolumn <- peaks$lodcolumn[i]
+  chr <- peaks$chr[i]
+  lod <- peaks$lod[i]
+  pos <- mapdf$pmapdf[which(mapdf$gmapdf == peaks$pos[i] & mapdf$chr == peaks$chr[i])]
+  ci_lo <- mapdf$pmapdf[which(mapdf$gmapdf == peaks$ci_lo[i] & mapdf$chr == peaks$chr[i])]
+  ci_hi <- mapdf$pmapdf[which(mapdf$gmapdf == peaks$ci_hi[i] & mapdf$chr == peaks$chr[i])]
+  peaks_mb=cbind(lodindex, lodcolumn, chr, pos, lod, ci_lo, ci_hi)
+  peaks_mbl[[i]] <- peaks_mb
+}
+peaks_mba <- do.call(rbind, peaks_mbl)
+peaks_mba <- as.data.frame(peaks_mba)
+peaks_mba[,c("chr", "pos", "lod", "ci_lo", "ci_hi")] <- sapply(peaks_mba[,c("chr", "pos", "lod", "ci_lo", "ci_hi")], as.numeric)
+
+rownames(peaks_mba) <- NULL
+peaks_mba[] %>%
+  kable(escape = F,align = c("ccccccc")) %>%
+  kable_styling("striped", full_width = T) %>%
+  column_spec(1, bold=TRUE)
 
 ```
 ### **4.4. QTL effects**
@@ -227,9 +264,9 @@ for (i in 1:nrow(peaks)){
 
 
   #Table 1
-  chr = peaks$chr[i]
-  start=peaks$ci_lo[i]
-  end=peaks$ci_hi[i]
+  chr = peaks_mba$chr[i]
+  start=peaks_mba$ci_lo[i]
+  end=peaks_mba$ci_hi[i]
 
   genesgss = query_genes(chr, start, end)
 
